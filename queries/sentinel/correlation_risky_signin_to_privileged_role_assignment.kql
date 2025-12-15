@@ -1,0 +1,80 @@
+// Title: Correlation - Risky Sign-in Followed by Privileged Role Assignment
+// Goal: Detect a pattern where a risky successful sign-in is followed by a privileged role assignment shortly after.
+// Data sources: SigninLogs, AuditLogs
+// Tune: lookback window, correlation window, risk filters, role list.
+
+let lookback = 7d;
+let correlationWindow = 90m;
+
+let privilegedRoles = dynamic([
+  "Global Administrator",
+  "Privileged Role Administrator",
+  "Security Administrator",
+  "Conditional Access Administrator",
+  "User Administrator",
+  "Exchange Administrator",
+  "Cloud Application Administrator",
+  "Application Administrator"
+]);
+
+let riskySignins =
+    SigninLogs
+    | where TimeGenerated >= ago(lookback)
+    | where ResultType == 0
+    | extend UserUPN = tostring(UserPrincipalName)
+    | extend IP = tostring(IPAddress)
+    | extend Country = tostring(LocationDetails.countryOrRegion)
+    | extend City = tostring(LocationDetails.city)
+    | extend App = tostring(AppDisplayName)
+    | extend RiskLevel = tostring(RiskLevelDuringSignIn)
+    | extend RiskState = tostring(RiskState)
+    | extend CAStatus = tostring(ConditionalAccessStatus)
+    | extend DeviceId = tostring(DeviceDetail.deviceId)
+    | extend Browser = tostring(DeviceDetail.browser)
+    | extend OS = tostring(DeviceDetail.operatingSystem)
+    // "Risky" heuristic: high/medium risk OR explicitly atRisk. Keep generic because tenants differ.
+    | where tolower(RiskLevel) in ("high","medium") or tolower(RiskState) has "atrisk"
+    | project SigninTime=TimeGenerated, UserUPN, IP, Country, City, App, RiskLevel, RiskState, CAStatus, DeviceId, Browser, OS;
+
+let roleAssignments =
+    AuditLogs
+    | where TimeGenerated >= ago(lookback)
+    | where OperationName has_any ("Add member to role", "Add eligible member to role", "Add member to directory role", "Add role assignment", "Add app role assignment")
+    | extend InitiatorUPN = tostring(InitiatedBy.user.userPrincipalName)
+    | extend InitiatorIP = tostring(InitiatedBy.user.ipAddress)
+    // Target user may appear in TargetResources. Keep defensive parsing.
+    | extend TargetUPN = tostring(TargetResources[0].userPrincipalName)
+    | extend TargetDisplay = tostring(TargetResources[0].displayName)
+    | extend RoleName = tostring(TargetResources[0].displayName)
+    // If RoleName isn't directly present, try to find it in modifiedProperties text.
+    | extend Modified = tostring(TargetResources[0].modifiedProperties)
+    | extend RoleFromModified = extract(@"displayName.*?""(.*?)""", 1, Modified)
+    | extend FinalRole = iff(isnotempty(RoleFromModified), RoleFromModified, RoleName)
+    | where FinalRole in~ (privilegedRoles)
+    | project AssignTime=TimeGenerated, InitiatorUPN, InitiatorIP, TargetUPN, TargetDisplay, FinalRole, OperationName, Modified;
+
+riskySignins
+| join kind=innerunique (roleAssignments) on $left.UserUPN == $right.InitiatorUPN
+| where AssignTime between (SigninTime .. SigninTime + correlationWindow)
+| extend TimeDeltaMinutes = datetime_diff("minute", AssignTime, SigninTime)
+| project
+    SigninTime,
+    AssignTime,
+    TimeDeltaMinutes,
+    UserUPN,
+    IP,
+    Country,
+    City,
+    App,
+    RiskLevel,
+    RiskState,
+    CAStatus,
+    DeviceId,
+    Browser,
+    OS,
+    FinalRole,
+    TargetUPN,
+    TargetDisplay,
+    OperationName,
+    InitiatorIP
+| order by AssignTime desc
