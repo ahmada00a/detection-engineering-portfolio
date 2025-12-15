@@ -1,0 +1,1 @@
+index=main earliest=-25h sourcetype="WinEventLog:Microsoft-Windows-Sysmon/Operational" SourceIp=10.150.10.34 | stats count by DestinationIp,EventCode | sort - count
