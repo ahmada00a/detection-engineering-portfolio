@@ -1,0 +1,1 @@
+index="your index" earliest=-25h sourcetype=WinEventLog:Security EventCode=4738 (Account_Name != "Administrator" AND Account_Name != "*$*" AND "Security ID:*500") | table Account_Name
