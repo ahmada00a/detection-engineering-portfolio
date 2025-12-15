@@ -1,0 +1,1 @@
+index=main earliest=-25h sourcetype="WinEventLog:Microsoft-Windows-Sysmon/Operational" ("EventCode=22" AND "68.183.32.229") OR ("EventCode=3" AND "68.183.32.229") | stats count by ComputerName,EventCode | sort - count
