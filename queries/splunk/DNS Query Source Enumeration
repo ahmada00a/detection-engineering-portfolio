@@ -1,0 +1,1 @@
+index=main earliest=-25h sourcetype="WinEventLog:Microsoft-Windows-Sysmon/Operational" EventCode=22 "68.183.32.229" | stats count by host | sort - count
