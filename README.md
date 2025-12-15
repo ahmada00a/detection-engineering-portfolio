@@ -10,6 +10,10 @@ A **sanitized, recruiter-friendly portfolio** that demonstrates how I approach:
 - Cloud security posture improvements (Azure and GCP)
 - Security operations documentation (runbooks, evidence, repeatability)
 
+## Original work statement
+All content in this repository is **original work** written by me and **sanitized** for public sharing.  
+No third-party detection rules are copied in bulk. If I ever reference external material, I will link to it and credit the source.
+
 No customer data. No internal URLs. No tenant IDs. No logs.
 
 ## Core skills and tooling
